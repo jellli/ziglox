@@ -1,7 +1,7 @@
 .{
     .name = .ziglox,
     .version = "0.0.1",
-    .minimum_zig_version = "0.15.2",
+    .minimum_zig_version = "0.16.0-dev.2535+b5bd49460",
     .paths = .{""},
     .fingerprint = 0xd4dee9a09ef944e6,
 }

@@ -1,6 +1,8 @@
 const std = @import("std");
 const Token = @import("Token.zig");
+const TokenType = Token.TokenType;
 const Allocator = std.mem.Allocator;
+const main = @import("main.zig");
 
 const Self = @This();
 
@@ -11,7 +13,7 @@ allocator: Allocator,
 source: []const u8,
 tokens: std.ArrayList(Token),
 
-fn init(allocator: Allocator, source: []const u8) @This() {
+pub fn init(allocator: Allocator, source: []const u8) @This() {
     return Self{
         .allocator = allocator,
         .source = source,
@@ -19,19 +21,23 @@ fn init(allocator: Allocator, source: []const u8) @This() {
     };
 }
 
-fn scanTokens(self: *Self) std.ArrayList(Token) {
+pub fn deinit(self: *Self) void {
+    self.allocator.free(self.tokens);
+}
+
+pub fn scanTokens(self: *Self) !std.ArrayList(Token) {
     while (!self.isAtEnd()) {
         self.start = self.current;
-        self.scanToken();
+        try self.scanToken();
     }
 
-    self.tokens.append(self.allocator, Token.init(.EOF, "", null, self.line));
+    try self.tokens.append(self.allocator, Token.init(.EOF, "", null, self.line));
     return self.tokens;
 }
 
-fn sccanToken(self: *Self) void {
+fn scanToken(self: *Self) !void {
     const c: u8 = self.advance();
-    switch (c) {
+    try switch (c) {
         '(' => self.addToken(.LEFT_PAREN, null),
         ')' => self.addToken(.RIGHT_PAREN, null),
         '{' => self.addToken(.LEFT_BRACE, null),
@@ -42,12 +48,50 @@ fn sccanToken(self: *Self) void {
         '+' => self.addToken(.PLUS, null),
         ';' => self.addToken(.SEMICOLON, null),
         '*' => self.addToken(.STAR, null),
-    }
+
+        '!' => self.addToken(if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG, null),
+        '=' => self.addToken(if (self.match('=')) TokenType.EQUAL_EQUAL else TokenType.EQUAL, null),
+        '<' => self.addToken(if (self.match('=')) TokenType.LESS_EQUAL else TokenType.LESS, null),
+        '>' => self.addToken(if (self.match('=')) TokenType.GREATER_EQUAL else TokenType.GREATER, null),
+        '/' => {
+            if (self.match('/')) {
+                while (self.peek() != '\n' and !self.isAtEnd()) {
+                    _ = self.advance();
+                }
+            } else {
+                try self.addToken(.SLASH, null);
+            }
+        },
+
+        ' ',
+        '\r',
+        '\t',
+        => {},
+
+        '\n' => self.line = self.line + 1,
+
+        else => {
+            try main.err(self.line, "Unexpected character.");
+        },
+    };
 }
 
-fn addToken(self: *Self, token_type: Token.TokenType, literal: Token.LiteralValue) void {
+fn addToken(self: *Self, token_type: TokenType, literal: ?Token.LiteralValue) !void {
     const text = self.source[self.start..self.current];
-    self.tokens.append(self.allocator, .{ .token_type = token_type, .lexeme = text, .literal = literal });
+    try self.tokens.append(self.allocator, .{
+        .token_type = token_type,
+        .lexeme = text,
+        .literal = literal,
+        .line = self.line,
+    });
+}
+
+fn match(self: *Self, expected: u8) bool {
+    if (self.isAtEnd()) return false;
+    if (self.source[self.current] != expected) return false;
+
+    self.current += 1;
+    return true;
 }
 
 fn advance(self: *Self) u8 {
@@ -58,4 +102,9 @@ fn advance(self: *Self) u8 {
 }
 fn isAtEnd(self: *Self) bool {
     return self.current >= self.source.len;
+}
+
+fn peek(self: *Self) u8 {
+    if (self.isAtEnd()) return 0;
+    return self.source[self.current];
 }
