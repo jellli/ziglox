@@ -32,7 +32,7 @@ pub fn main(init: std.process.Init) !void {
             try runPrompt(io, allocator);
         },
         2 => {
-            // try runFile(io, allocator, args[1]);
+            try runFile(io, allocator, args[1]);
         },
         else => {
             try stdout.print("Usage: zlox [script]", .{});
@@ -74,7 +74,7 @@ fn runPrompt(io: std.Io, allocator: Allocator) !void {
 }
 
 fn run(allocator: Allocator, source: []const u8) !void {
-    var scanner = Scanner.init(allocator, source);
+    var scanner = try Scanner.init(allocator, source);
     const tokens = try scanner.scanTokens();
     for (tokens.items) |token| {
         std.debug.print("{}\n", .{token});

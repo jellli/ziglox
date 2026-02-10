@@ -18,9 +18,7 @@ pub fn to_string(self: *Self, allocator: *std.mem.Allocator) []const u8 {
     });
 }
 
-pub const LiteralValue = union(enum) {
-    Nil: void,
-};
+pub const LiteralValue = union(enum) { Nil: void, String: []const u8, Number: f32 };
 
 pub const TokenType = enum {
     // Single-character tokens.

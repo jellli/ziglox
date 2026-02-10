@@ -3,6 +3,9 @@ const Token = @import("Token.zig");
 const TokenType = Token.TokenType;
 const Allocator = std.mem.Allocator;
 const main = @import("main.zig");
+const isDigit = std.ascii.isDigit;
+const isAlphabetic = std.ascii.isAlphabetic;
+const isAlphanumeric = std.ascii.isAlphanumeric;
 
 const Self = @This();
 
@@ -13,7 +16,26 @@ allocator: Allocator,
 source: []const u8,
 tokens: std.ArrayList(Token),
 
-pub fn init(allocator: Allocator, source: []const u8) @This() {
+const keywords = std.StaticStringMap(TokenType).initComptime(.{
+    .{ "and", .AND },
+    .{ "class", .CLASS },
+    .{ "else", .ELSE },
+    .{ "false", .FALSE },
+    .{ "for", .FOR },
+    .{ "fun", .FUN },
+    .{ "if", .IF },
+    .{ "nil", .NIL },
+    .{ "or", .OR },
+    .{ "print", .PRINT },
+    .{ "return", .RETURN },
+    .{ "super", .SUPER },
+    .{ "this", .THIS },
+    .{ "true", .TRUE },
+    .{ "var", .VAR },
+    .{ "while", .WHILE },
+});
+
+pub fn init(allocator: Allocator, source: []const u8) !@This() {
     return Self{
         .allocator = allocator,
         .source = source,
@@ -23,6 +45,7 @@ pub fn init(allocator: Allocator, source: []const u8) @This() {
 
 pub fn deinit(self: *Self) void {
     self.allocator.free(self.tokens);
+    self.allocator.free(self.keywords);
 }
 
 pub fn scanTokens(self: *Self) !std.ArrayList(Token) {
@@ -70,9 +93,11 @@ fn scanToken(self: *Self) !void {
 
         '\n' => self.line = self.line + 1,
 
-        else => {
-            try main.err(self.line, "Unexpected character.");
-        },
+        '"' => self.string(),
+        '0'...'9' => self.number(),
+        'a'...'z', 'A'...'Z', '_' => self.identifier(),
+
+        else => try main.err(self.line, "Unexpected character."),
     };
 }
 
@@ -107,4 +132,45 @@ fn isAtEnd(self: *Self) bool {
 fn peek(self: *Self) u8 {
     if (self.isAtEnd()) return 0;
     return self.source[self.current];
+}
+
+fn peekNext(self: *Self) u8 {
+    if (self.current + 1 >= self.source.len) return 0;
+    return self.source[self.current + 1];
+}
+
+fn string(self: *Self) !void {
+    while (self.peek() != '"' and !self.isAtEnd()) {
+        if (self.peek() == '\n') self.line += 1;
+        _ = self.advance();
+    }
+
+    if (self.isAtEnd()) {
+        try main.err(self.line, "Unterminated string.");
+        return;
+    }
+
+    _ = self.advance();
+    const value = self.source[self.start + 1 .. self.current - 1];
+    try self.addToken(.STRING, .{ .String = value });
+}
+
+fn number(self: *Self) !void {
+    while (isDigit(self.peek())) _ = self.advance();
+
+    if (self.peek() == '.' and isDigit(self.peekNext())) {
+        _ = self.advance();
+        while (isDigit(self.peek())) _ = self.advance();
+    }
+    try self.addToken(.NUMBER, .{
+        .Number = try std.fmt.parseFloat(f32, self.source[self.start..self.current]),
+    });
+}
+
+fn identifier(self: *Self) !void {
+    while (isAlphanumeric(self.peek())) _ = self.advance();
+    const text = self.source[self.start..self.current];
+    const token_type: TokenType = keywords.get(text) orelse TokenType.IDENTIFIER;
+
+    try self.addToken(token_type, null);
 }
